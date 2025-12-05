@@ -15,15 +15,42 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// === 新增：城市代碼對照表 ===
-// 這樣前端傳送英文代碼進來，我們就知道要去 CWA 查哪個中文城市
+// === 核心修改：全臺 22 縣市代碼對照表 ===
+// 包含 6 直轄市、3 市、13 縣
 const CITY_MAP = {
+  // === 六都 (直轄市) ===
   taipei: "臺北市",
   new_taipei: "新北市",
   taoyuan: "桃園市",
   taichung: "臺中市",
   tainan: "臺南市",
-  kaohsiung: "高雄市"
+  kaohsiung: "高雄市",
+
+  // === 北部其他縣市 ===
+  keelung: "基隆市",
+  hsinchu_city: "新竹市",
+  hsinchu_county: "新竹縣",
+  yilan: "宜蘭縣",
+
+  // === 中部其他縣市 ===
+  miaoli: "苗栗縣",
+  changhua: "彰化縣",
+  nantou: "南投縣",
+  yunlin: "雲林縣",
+
+  // === 南部其他縣市 ===
+  chiayi_city: "嘉義市",
+  chiayi_county: "嘉義縣",
+  pingtung: "屏東縣",
+
+  // === 東部 ===
+  hualien: "花蓮縣",
+  taitung: "臺東縣",
+
+  // === 外島 ===
+  penghu: "澎湖縣",
+  kinmen: "金門縣",
+  lienchiang: "連江縣"
 };
 
 /**
@@ -42,7 +69,7 @@ const getCityWeather = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: "參數錯誤",
-        message: "不支援此城市代碼，請使用: taipei, new_taipei, taoyuan, taichung, tainan, kaohsiung",
+        message: `不支援 '${cityCode}'。請使用正確的城市代碼 (例如: taipei, hualien, penghu...)`,
       });
     }
 
@@ -60,7 +87,7 @@ const getCityWeather = async (req, res) => {
       {
         params: {
           Authorization: CWA_API_KEY,
-          locationName: targetLocation, // <--- 這裡改成變數了！
+          locationName: targetLocation, // 使用映射後的中文名稱
         },
       }
     );
@@ -71,14 +98,14 @@ const getCityWeather = async (req, res) => {
     if (!locationData) {
       return res.status(404).json({
         error: "查無資料",
-        message: `無法取得 ${targetLocation} 的天氣資料`,
+        message: `無法取得 ${targetLocation} 的天氣資料，請確認 CWA API 來源是否正常。`,
       });
     }
 
     // 整理天氣資料
     const weatherData = {
       city: locationData.locationName,
-      cityCode: cityCode, // 回傳代碼方便前端辨識
+      cityCode: cityCode, 
       updateTime: response.data.records.datasetDescription,
       forecasts: [],
     };
@@ -147,18 +174,20 @@ const getCityWeather = async (req, res) => {
   }
 };
 
-// Routes
+// Routes - 首頁顯示所有可用連結
 app.get("/", (req, res) => {
+  const protocol = req.protocol;
+  const host = req.get('host');
+  const baseUrl = `${protocol}://${host}/api/weather/`;
+
   res.json({
-    message: "歡迎使用 CWA 天氣預報 API (六都版)",
-    endpoints: {
-      taipei: "/api/weather/taipei",
-      new_taipei: "/api/weather/new_taipei",
-      taoyuan: "/api/weather/taoyuan",
-      taichung: "/api/weather/taichung",
-      tainan: "/api/weather/tainan",
-      kaohsiung: "/api/weather/kaohsiung",
-    },
+    message: "歡迎使用全臺天氣預報 API",
+    usage: "請在網址後方加上城市代碼",
+    example: `${baseUrl}taipei`,
+    available_cities: Object.keys(CITY_MAP).reduce((acc, key) => {
+        acc[key] = `${baseUrl}${key}`;
+        return acc;
+    }, {})
   });
 });
 
@@ -166,8 +195,7 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
-// === 核心修改：將單一路徑改成動態參數路徑 ===
-// :city 代表這是一個變數，任何 /api/weather/xxx 都會進到這裡
+// 動態路由：處理所有城市請求
 app.get("/api/weather/:city", getCityWeather);
 
 // Error handling middleware
@@ -183,10 +211,11 @@ app.use((err, req, res, next) => {
 app.use((req, res) => {
   res.status(404).json({
     error: "找不到此路徑",
+    message: "請確認網址是否正確"
   });
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 伺服器已啟動，監聽 Port: ${PORT}`);
-  console.log(`📍 測試連結: http://localhost:${PORT}/api/weather/taipei`);
+  console.log(`📍 支援全臺 22 縣市天氣查詢`);
 });
